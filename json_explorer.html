@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSONPath インタラクティブエディタ</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2em;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .input-section {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 10px;
+            font-size: 0.95em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        #monaco-container {
+            width: 100%;
+            height: 300px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        #monaco-container.focused {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .error {
+            color: #e74c3c;
+            margin-top: 10px;
+            padding: 10px;
+            background: #fee;
+            border-radius: 5px;
+            font-size: 0.9em;
+            display: none;
+        }
+
+        .path-builder {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .path-display {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .path-input {
+            flex: 1;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-family: 'Fira Code', monospace;
+            font-size: 16px;
+            background: white;
+            transition: all 0.3s ease;
+        }
+
+        .path-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .back-button {
+            padding: 12px 20px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .back-button:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .back-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .path-segments {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 20px;
+            min-height: 40px;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .segment {
+            padding: 8px 12px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-family: 'Fira Code', monospace;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .segment::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: width 0.5s, height 0.5s;
+        }
+
+        .segment:hover::before {
+            width: 100px;
+            height: 100px;
+        }
+
+        .segment:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .candidates {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .candidate-button {
+            padding: 10px 18px;
+            background: white;
+            color: #333;
+            border: 2px solid #667eea;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            font-size: 0.95em;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .candidate-button::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: width 0.5s, height 0.5s;
+            z-index: 0;
+        }
+
+        .candidate-button span {
+            position: relative;
+            z-index: 1;
+        }
+
+        .candidate-button:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .candidate-button:hover {
+            color: white;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .candidate-button.array-index {
+            background: #fff3cd;
+            border-color: #ffc107;
+        }
+
+        .candidate-button.array-index:hover::before {
+            background: linear-gradient(135deg, #ffc107, #ff9800);
+        }
+
+        .preview-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .preview-content {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            min-height: 150px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Fira Code', monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .preview-content.error {
+            background: #fee;
+            border-color: #e74c3c;
+            color: #e74c3c;
+        }
+
+        .type-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            background: #e7f3ff;
+            color: #0066cc;
+            border-radius: 12px;
+            font-size: 0.85em;
+            margin-left: 8px;
+            font-weight: 600;
+        }
+
+        .type-array {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .type-object {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .type-string {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .type-number {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .type-boolean {
+            background: #e7e3ff;
+            color: #4c2a85;
+        }
+
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .path-display {
+                flex-direction: column;
+            }
+            
+            .path-input {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 JSONPath インタラクティブエディタ</h1>
+        
+        <div class="grid">
+            <div class="input-section">
+                <label for="json-input">JSON入力</label>
+                <div id="monaco-container"></div>
+                <div id="json-error" class="error"></div>
+            </div>
+            
+            <div class="preview-section">
+                <label>プレビュー結果</label>
+                <div id="preview" class="preview-content">JSONを入力してパスを構築してください</div>
+            </div>
+        </div>
+        
+        <div class="path-builder">
+            <label>JSONPath ビルダー</label>
+            
+            <div class="path-display">
+                <input type="text" id="path-input" class="path-input" value="$" readonly>
+                <button id="back-button" class="back-button" disabled>
+                    ← 戻る
+                </button>
+            </div>
+            
+            <div class="path-segments" id="path-segments">
+                <div class="segment">$</div>
+            </div>
+            
+            <label>選択可能な候補</label>
+            <div id="candidates" class="candidates"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentPath = ['$'];
+        let jsonData = null;
+        let pathHistory = [['$']];
+        let editor = null;
+
+        const defaultJSON = `{
+  "user": {
+    "name": "田中太郎",
+    "age": 30,
+    "email": "tanaka@example.com",
+    "address": {
+      "city": "東京",
+      "postal": "100-0001",
+      "details": {
+        "building": "〇〇ビル",
+        "floor": 5
+      }
+    },
+    "hobbies": ["読書", "映画", "プログラミング"],
+    "scores": [85, 92, 78, 95, 88]
+  },
+  "products": [
+    {"id": 1, "name": "ノートPC", "price": 120000},
+    {"id": 2, "name": "マウス", "price": 3000},
+    {"id": 3, "name": "キーボード", "price": 8000}
+  ]
+}`;
+
+        // Monaco Editor初期化
+        require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' }});
+        require(['vs/editor/editor.main'], function() {
+            editor = monaco.editor.create(document.getElementById('monaco-container'), {
+                value: defaultJSON,
+                language: 'json',
+                theme: 'vs',
+                automaticLayout: true,
+                minimap: { enabled: false },
+                fontSize: 14,
+                scrollBeyondLastLine: false,
+                wordWrap: 'on',
+                wrappingIndent: 'indent',
+                formatOnPaste: true,
+                formatOnType: true,
+                folding: true,
+                lineNumbers: 'on',
+                renderLineHighlight: 'all',
+                scrollbar: {
+                    vertical: 'auto',
+                    horizontal: 'auto'
+                }
+            });
+
+            // エディタの変更イベント
+            editor.onDidChangeModelContent(() => {
+                if (parseJSON()) {
+                    // JSONが正常にパースされたら、パスをリセット
+                    currentPath = ['$'];
+                    pathHistory = [['$']];
+                    updatePath();
+                }
+            });
+
+            // フォーカスイベント
+            editor.onDidFocusEditorText(() => {
+                document.getElementById('monaco-container').classList.add('focused');
+            });
+
+            editor.onDidBlurEditorText(() => {
+                document.getElementById('monaco-container').classList.remove('focused');
+            });
+
+            // 初期化
+            parseJSON();
+        });
+
+        const pathInput = document.getElementById('path-input');
+        const candidates = document.getElementById('candidates');
+        const preview = document.getElementById('preview');
+        const jsonError = document.getElementById('json-error');
+        const backButton = document.getElementById('back-button');
+        const pathSegments = document.getElementById('path-segments');
+
+        function parseJSON() {
+            try {
+                if (!editor) return false;
+                jsonData = JSON.parse(editor.getValue());
+                jsonError.style.display = 'none';
+                jsonError.textContent = '';
+                updateCandidates();
+                updatePreview();
+                return true;
+            } catch (e) {
+                jsonError.style.display = 'block';
+                jsonError.textContent = 'JSONパースエラー: ' + e.message;
+                jsonData = null;
+                candidates.innerHTML = '';
+                preview.textContent = 'JSONパースエラー';
+                preview.classList.add('error');
+                return false;
+            }
+        }
+
+        function getValueAtPath(obj, path) {
+            if (path.length === 1 && path[0] === '$') {
+                return obj;
+            }
+            
+            let current = obj;
+            for (let i = 1; i < path.length; i++) {
+                const segment = path[i];
+                if (segment.startsWith('[') && segment.endsWith(']')) {
+                    const indexStr = segment.slice(1, -1);
+                    if (indexStr === '*') {
+                        // [*]の場合、配列の最初の要素を代表として取得
+                        if (Array.isArray(current) && current.length > 0) {
+                            current = current[0];
+                        } else {
+                            return undefined;
+                        }
+                    } else {
+                        const index = parseInt(indexStr);
+                        current = current[index];
+                    }
+                } else {
+                    current = current[segment];
+                }
+                if (current === undefined) {
+                    return undefined;
+                }
+            }
+            return current;
+        }
+
+        function getTypeLabel(value) {
+            if (Array.isArray(value)) return 'array';
+            if (value === null) return 'null';
+            return typeof value;
+        }
+
+        function getTypeBadge(value) {
+            const type = getTypeLabel(value);
+            const classMap = {
+                'array': 'type-array',
+                'object': 'type-object',
+                'string': 'type-string',
+                'number': 'type-number',
+                'boolean': 'type-boolean',
+                'null': 'type-null'
+            };
+            return `<span class="type-badge ${classMap[type] || ''}">${type}</span>`;
+        }
+
+        function updateCandidates() {
+            if (!jsonData) return;
+            
+            candidates.innerHTML = '';
+            const currentValue = getValueAtPath(jsonData, currentPath);
+            
+            if (currentValue === undefined) {
+                candidates.innerHTML = '<div style="color: #999;">値が見つかりません</div>';
+                return;
+            }
+            
+            if (Array.isArray(currentValue)) {
+                // 配列の場合はインデックスと [*] を候補として表示
+                const allBtn = document.createElement('button');
+                allBtn.className = 'candidate-button array-index';
+                allBtn.innerHTML = '<span>[*] (全要素/代表要素)</span>';
+                allBtn.onclick = () => addPathSegment('[*]');
+                candidates.appendChild(allBtn);
+                
+                currentValue.forEach((_, index) => {
+                    const btn = document.createElement('button');
+                    btn.className = 'candidate-button array-index';
+                    btn.innerHTML = `<span>[${index}]</span>`;
+                    btn.onclick = () => addPathSegment(`[${index}]`);
+                    candidates.appendChild(btn);
+                });
+            } else if (typeof currentValue === 'object' && currentValue !== null) {
+                // オブジェクトの場合はキーを候補として表示
+                Object.keys(currentValue).forEach(key => {
+                    const btn = document.createElement('button');
+                    btn.className = 'candidate-button';
+                    const value = currentValue[key];
+                    btn.innerHTML = `<span>${key}</span> ${getTypeBadge(value)}`;
+                    btn.onclick = () => addPathSegment(key);
+                    candidates.appendChild(btn);
+                });
+            } else {
+                // プリミティブ値の場合
+                candidates.innerHTML = '<div style="color: #999;">これ以上掘り下げられません（プリミティブ値）</div>';
+            }
+        }
+
+        function addPathSegment(segment) {
+            currentPath.push(segment);
+            pathHistory.push([...currentPath]);
+            updatePath();
+            updateCandidates();
+            updatePreview();
+        }
+
+        function goBack() {
+            if (pathHistory.length > 1) {
+                pathHistory.pop();
+                currentPath = [...pathHistory[pathHistory.length - 1]];
+                updatePath();
+                updateCandidates();
+                updatePreview();
+            }
+        }
+
+        function updatePath() {
+            // パスの文字列表現を更新
+            let pathStr = '$';
+            for (let i = 1; i < currentPath.length; i++) {
+                const segment = currentPath[i];
+                if (segment.startsWith('[')) {
+                    pathStr += segment;
+                } else {
+                    pathStr += '.' + segment;
+                }
+            }
+            pathInput.value = pathStr;
+            
+            // パスセグメントの表示を更新
+            pathSegments.innerHTML = '';
+            currentPath.forEach((segment, index) => {
+                const segDiv = document.createElement('div');
+                segDiv.className = 'segment';
+                segDiv.textContent = segment;
+                segDiv.onclick = () => {
+                    // クリックされたセグメントまで戻る
+                    currentPath = currentPath.slice(0, index + 1);
+                    pathHistory.push([...currentPath]);
+                    updatePath();
+                    updateCandidates();
+                    updatePreview();
+                };
+                pathSegments.appendChild(segDiv);
+            });
+            
+            // 戻るボタンの状態を更新
+            backButton.disabled = currentPath.length <= 1;
+        }
+
+        function updatePreview() {
+            if (!jsonData) return;
+            
+            preview.classList.remove('error');
+            const value = getValueAtPath(jsonData, currentPath);
+            
+            if (value === undefined) {
+                preview.textContent = '値が見つかりません';
+                preview.classList.add('error');
+            } else {
+                try {
+                    preview.textContent = JSON.stringify(value, null, 2);
+                    
+                    // [*]が含まれるパスの場合、説明を追加
+                    if (currentPath.some(segment => segment === '[*]')) {
+                        preview.textContent = '// 注: [*]は配列の最初の要素を代表として表示しています\n' + preview.textContent;
+                    }
+                } catch (e) {
+                    preview.textContent = String(value);
+                }
+            }
+        }
+
+        // イベントリスナー
+        backButton.addEventListener('click', goBack);
+
+        // キーボードショートカット
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
+                // エディタにフォーカスがない場合のみ、パスを戻る
+                const activeElement = document.activeElement;
+                const isEditorFocused = activeElement && activeElement.closest('.monaco-editor');
+                if (!isEditorFocused) {
+                    e.preventDefault();
+                    goBack();
+                }
+            }
+        });
+    </script>
+</body>
+</html>
